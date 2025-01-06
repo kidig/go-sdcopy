@@ -5,7 +5,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/djherbis/times"
 )
@@ -27,24 +30,23 @@ func main() {
 			return err
 		}
 
-		if !info.IsDir() {
-			if !isIgnoredFile(info.Name()) {
-
-				sem <- info.Name()
-				wg.Add(1)
-
-				go func() {
-					defer wg.Done()
-
-					err := copyFile(path, destinationPath, info)
-					if err != nil {
-						fmt.Printf("Error copying file %s: %v\n", path, err)
-					}
-
-					<-sem
-				}()
-			}
+		if info.IsDir() {
+			return nil
 		}
+
+		sem <- info.Name()
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			err := copyFile(path, destinationPath, info)
+			if err != nil {
+				fmt.Printf("Error copying file %s: %v\n", path, err)
+			}
+
+			<-sem
+		}()
 
 		return nil
 	})
@@ -59,14 +61,28 @@ func main() {
 	fmt.Println("Media files successfully copied.")
 }
 
-func isIgnoredFile(filename string) bool {
-	extensions := []string{".tmp", ".bak", ".log"}
-	for _, ext := range extensions {
-		if filepath.Ext(filename) == ext {
-			return true
-		}
+type placeholders struct {
+	year  string
+	month string
+	day   string
+}
+
+func resolveDestinationPath(destinationPath string, d time.Time) string {
+	pl := placeholders{
+		year:  d.Format("2006"),
+		month: d.Format("01"),
+		day:   d.Format("02"),
 	}
-	return false
+
+	resolved := destinationPath
+	resolved = strings.ReplaceAll(resolved, "{year}", pl.year)
+	resolved = strings.ReplaceAll(resolved, "{month}", pl.month)
+	resolved = strings.ReplaceAll(resolved, "{day}", pl.day)
+
+	re := regexp.MustCompile(`\{[^}]*\}`)
+	resolved = re.ReplaceAllString(resolved, "")
+
+	return resolved
 }
 
 func copyFile(sourcePath, destinationPath string, info os.FileInfo) error {
@@ -74,8 +90,7 @@ func copyFile(sourcePath, destinationPath string, info os.FileInfo) error {
 	mtime := info.ModTime()
 	atime := ts.AccessTime()
 
-	ph := NewPlaceholders(mtime)
-	destDir := ph.Apply(destinationPath)
+	destDir := resolveDestinationPath(destinationPath, mtime)
 
 	if err := os.MkdirAll(destDir, os.ModePerm); err != nil {
 		return fmt.Errorf("failed to create directory %s: %v", destDir, err)

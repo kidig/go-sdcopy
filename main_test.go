@@ -77,3 +77,24 @@ func TestCopyFile(t *testing.T) {
 		t.Errorf("expected modification time %v, got %v", mtime, dstInfo.ModTime())
 	}
 }
+
+func TestResolveDestinationPath(t *testing.T) {
+	d := time.Date(2023, time.March, 14, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"Today is {year}-{month}-{day}", "Today is 2023-03-14"},
+		{"Year: {year}, Month: {month}, Day: {day}", "Year: 2023, Month: 03, Day: 14"},
+		{"No placeholders here", "No placeholders here"},
+		{"Unknown {placeholder}", "Unknown "},
+	}
+
+	for _, test := range tests {
+		result := resolveDestinationPath(test.input, d)
+		if result != test.expected {
+			t.Errorf("expected %s, got %s", test.expected, result)
+		}
+	}
+}
