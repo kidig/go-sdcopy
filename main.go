@@ -13,6 +13,8 @@ import (
 	"github.com/djherbis/times"
 )
 
+const workerMax = 4
+
 func main() {
 	if len(os.Args) != 3 {
 		fmt.Println("Usage: sdcopy <src_path> <dst_path>")
@@ -22,8 +24,8 @@ func main() {
 	sourcePath := os.Args[1]
 	destinationPath := os.Args[2]
 
-	sem := make(chan string, 4)
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, workerMax)
 
 	err := filepath.Walk(sourcePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -34,29 +36,27 @@ func main() {
 			return nil
 		}
 
-		sem <- info.Name()
+		sem <- struct{}{}
 		wg.Add(1)
 
-		go func() {
-			defer wg.Done()
+		go func(path string, info os.FileInfo) {
+			defer func() { wg.Done(); <-sem }()
 
 			err := copyFile(path, destinationPath, info)
 			if err != nil {
 				fmt.Printf("Error copying file %s: %v\n", path, err)
 			}
-
-			<-sem
-		}()
+		}(path, info)
 
 		return nil
 	})
+
+	wg.Wait()
 
 	if err != nil {
 		fmt.Printf("Error scanning source path: %v\n", err)
 		os.Exit(1)
 	}
-
-	wg.Wait()
 
 	fmt.Println("Media files successfully copied.")
 }
@@ -116,7 +116,7 @@ func copyFile(sourcePath, destinationPath string, info os.FileInfo) error {
 	defer destFile.Close()
 
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
-		return fmt.Errorf("failed to copu file from %s to %s: %v", sourcePath, destPath, err)
+		return fmt.Errorf("failed to copy file from %s to %s: %v", sourcePath, destPath, err)
 	}
 
 	if err := os.Chtimes(destPath, atime, mtime); err != nil {

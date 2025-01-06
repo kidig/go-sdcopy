@@ -78,6 +78,25 @@ func TestCopyFile(t *testing.T) {
 	}
 }
 
+func TestFileExists(t *testing.T) {
+	// Create a temporary file
+	tempFile, err := os.CreateTemp("", "testfile")
+	if err != nil {
+		t.Fatalf("Failed to create temporary file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+
+	// Test that the file exists
+	if !fileExists(tempFile.Name()) {
+		t.Errorf("Expected file to exist: %s", tempFile.Name())
+	}
+
+	// Test that a non-existent file does not exist
+	if fileExists("nonexistentfile.txt") {
+		t.Errorf("Expected file to not exist: nonexistentfile.txt")
+	}
+}
+
 func TestResolveDestinationPath(t *testing.T) {
 	d := time.Date(2023, time.March, 14, 0, 0, 0, 0, time.UTC)
 
